@@ -1,5 +1,6 @@
 package me.shemplo.chat.server.clients;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -11,31 +12,34 @@ import me.shemplo.chat.server.ifs.ClientsPool;
 public class MapClientsPool implements ClientsPool {
 
 	private final Map <Integer, Client> clients;
+	private final Thread [] threads;
 	private final int POOL_SIZE;
 	
-	public MapClientsPool () {
+	public MapClientsPool (int threads) {
 		POOL_SIZE = Integer.MAX_VALUE / 2;
 		clients = new HashMap <> ();
 		
-		Thread t = new Thread (() -> {
-			while (true) {
-				Iterator <Client> cls = clients.values ().iterator ();
-				while (cls.hasNext ()) {
-					Client cl = cls.next ();
-					while (cl != null && cl.hasInputData ()) {
-						String read = cl.read ();
-						System.out.println (read);
-						cl.send (read);
+		this.threads = new Thread [threads];
+		Arrays.asList (this.threads)
+				.stream ()
+				.map (t -> new Thread (() -> {
+					while (true) {
+						try {
+							Thread.sleep (10);
+						} catch (InterruptedException ie) { return; }
+						
+						Iterator <Client> iterator = clients.values ().iterator ();
+						while (iterator.hasNext ()) {
+							Client client = iterator.next ();
+							synchronized (client) {
+								while (client != null && client.hasInputData ()) {
+									String message = client.read ();
+									sendAll ("Recieved: " + message);
+								}
+							}
+						}
 					}
-				}
-				
-				try {
-					Thread.sleep (10);
-				} catch (Exception e) { return; }
-			}
-		});
-		
-		t.start ();
+				})).forEach (Thread::start);
 	}
 	
 	public void add (Client client) {
@@ -85,7 +89,13 @@ public class MapClientsPool implements ClientsPool {
 	}
 	
 	public void sendAll (String message) {
-		
+		Iterator <Client> iterator = clients.values ().iterator ();
+		while (iterator.hasNext ()) {
+			Client client = iterator.next ();
+			synchronized (client) {
+				if (client != null) { client.send ("Recieved: " + message); }
+			}
+		}
 	}
 	
 }

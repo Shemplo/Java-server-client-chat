@@ -11,12 +11,10 @@ import me.shemplo.chat.server.ifs.ClientsPool;
 public class QueueClientsFactory implements ClientsFactory {
 	
 	private final Queue <Socket> queue;
-	private final ClientsPool pool;
 	private final Thread [] threads;
 	
-	public QueueClientsFactory (int threads) {
+	public QueueClientsFactory (ClientsPool pool, int threads) {
 		queue = new LinkedList <> ();
-		pool = new MapClientsPool ();
 		
 		this.threads = new Thread [threads];
 		Arrays.asList (this.threads).stream ().map (t -> new Thread (() -> {
@@ -30,7 +28,7 @@ public class QueueClientsFactory implements ClientsFactory {
 						}
 					}
 					
-					System.out.println ("[LOG] New connection");
+					//System.out.println ("[LOG] New connection");
 					pool.add (new ChatClient (queue.poll ()));
 				}
 			}

@@ -59,10 +59,6 @@ public class ChatClient implements Client {
 		this.ID = id;
 	}
 	
-	public Socket getSocket () {
-		return socket;
-	}
-	
 	public void setPool (ClientsPool pool) {
 		this.pool = pool;
 	}
@@ -88,7 +84,7 @@ public class ChatClient implements Client {
 		return false;
 	}
 	
-	public String read () {
+	public synchronized String read () {
 		if (!hasInputData ()) {
 			return null;
 		}
@@ -101,17 +97,13 @@ public class ChatClient implements Client {
 		return null;
 	}
 	
-	int a = 0;
-	
-	public void send (String message) {
+	public synchronized void send (String message) {
 		if (pw == null) {
 			return;
 		}
 		
 		pw.println (message);
 		pw.flush ();
-		
-		if (a ++ >= 10) kill ();
 	}
 	
 	public void kill () {

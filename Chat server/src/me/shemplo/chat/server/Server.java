@@ -5,9 +5,11 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 
+import me.shemplo.chat.server.clients.MapClientsPool;
 import me.shemplo.chat.server.clients.QueueClientsFactory;
 import me.shemplo.chat.server.ifs.SocketAcceptor;
 import me.shemplo.chat.server.ifs.ClientsFactory;
+import me.shemplo.chat.server.ifs.ClientsPool;
 
 public class Server {
 	
@@ -48,6 +50,8 @@ public class Server {
 			}
 		}
 		
+		// Here must be check for updates
+		
 		Server server = new Server ();
 		server.start (customPort);
 	}
@@ -59,7 +63,7 @@ public class Server {
 	
 	private ServerSocket server;
 	private SocketAcceptor acceptor;
-	private ClientsFactory registrar;
+	private ClientsFactory factory;
 	
 	private Thread acceptorThread;
 	
@@ -93,7 +97,9 @@ public class Server {
 	private void _init () {
 		PORT = server.getLocalPort ();
 		acceptor = new ClientAcceptor ();
-		registrar = new QueueClientsFactory (1);
+		
+		ClientsPool pool = new MapClientsPool (2);
+		factory = new QueueClientsFactory (pool, 1);
 	}
 	
 	public void stop () {
@@ -108,7 +114,7 @@ public class Server {
 			while (isRunning) {
 				try {
 					Socket socket = server.accept ();
-					registrar.register (socket);
+					factory.register (socket);
 					// Any other actions with sc	
 				} catch (SocketTimeoutException ste) {
 					// Ignoring it

@@ -6,6 +6,8 @@ public interface ClientsFactory {
 	
 	public void register (Socket socket);
 	
+	//public void changePool (ClientsPool pool);
+	
 	public void stop ();
 	
 }
