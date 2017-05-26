@@ -6,10 +6,10 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Queue;
-import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 import javafx.util.Pair;
+import me.shemplo.chat.server.Server;
 import me.shemplo.chat.server.exceptions.NoAvailableIDs;
 import me.shemplo.chat.server.ifs.Client;
 import me.shemplo.chat.server.ifs.ClientsPool;
@@ -20,9 +20,10 @@ public class MapClientsPool implements ClientsPool {
 	private final Map <Integer, Client> clients;
 	private final Thread [] senders;
 	private final Thread scanner;
+	
 	private final int POOL_SIZE;
 	
-	public MapClientsPool (int threads) {
+	public MapClientsPool (Server server, int threads) {
 		POOL_SIZE = Integer.MAX_VALUE / 2;
 		clients = new HashMap <> ();
 		
@@ -41,6 +42,11 @@ public class MapClientsPool implements ClientsPool {
 							}
 							
 							Pair <String, Integer> message = messages.poll ();
+							if (message.getKey ().equals ("-stop")) {
+								server.stop ();
+								continue;
+							}
+							
 							sendAll (message.getKey ());
 						}
 					}
@@ -120,12 +126,12 @@ public class MapClientsPool implements ClientsPool {
 	}
 	
 	public void sendAll (String message) {
-		Iterator <Client> iterator = clients.values ().iterator ();
-		while (iterator.hasNext ()) {
-			Client client = iterator.next ();
-			synchronized (client) {
-				if (client != null) { client.send ("Message: " + message); }
-			}
+		synchronized (clients) /* block */ {
+			Iterator <Client> iterator = clients.values ().iterator ();
+			Iterable <Client> toStream = () -> iterator;
+			StreamSupport.stream (toStream.spliterator (), false).forEach (c -> {
+				if (c != null) { c.send ("Message: " + message); }
+			});
 		}
 	}
 	

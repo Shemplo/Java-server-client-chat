@@ -7,9 +7,9 @@ import java.net.SocketTimeoutException;
 
 import me.shemplo.chat.server.clients.MapClientsPool;
 import me.shemplo.chat.server.clients.QueueClientsFactory;
-import me.shemplo.chat.server.ifs.SocketAcceptor;
 import me.shemplo.chat.server.ifs.ClientsFactory;
 import me.shemplo.chat.server.ifs.ClientsPool;
+import me.shemplo.chat.server.ifs.SocketAcceptor;
 
 public class Server {
 	
@@ -98,12 +98,12 @@ public class Server {
 		PORT = server.getLocalPort ();
 		acceptor = new ClientAcceptor ();
 		
-		ClientsPool pool = new MapClientsPool (2);
+		ClientsPool pool = new MapClientsPool (this, 2);
 		factory = new QueueClientsFactory (pool, 1);
 	}
 	
 	public void stop () {
-		
+		System.out.println ("[LOG] Stopping server");
 	}
 	
 	/* ===| ACCEPTOR |=== */
