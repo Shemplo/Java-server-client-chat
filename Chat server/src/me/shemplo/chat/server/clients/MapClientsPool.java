@@ -5,7 +5,9 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Map;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.Queue;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 import javafx.util.Pair;
 import me.shemplo.chat.server.exceptions.NoAvailableIDs;
@@ -14,7 +16,7 @@ import me.shemplo.chat.server.ifs.ClientsPool;
 
 public class MapClientsPool implements ClientsPool {
 
-	private final ConcurrentLinkedQueue <Pair <String, Integer>> messages;
+	private final Queue <Pair <String, Integer>> messages;
 	private final Map <Integer, Client> clients;
 	private final Thread [] senders;
 	private final Thread scanner;
@@ -24,7 +26,7 @@ public class MapClientsPool implements ClientsPool {
 		POOL_SIZE = Integer.MAX_VALUE / 2;
 		clients = new HashMap <> ();
 		
-		this.messages = new ConcurrentLinkedQueue <> ();
+		this.messages = new LinkedList <> ();
 		this.senders = new Thread [threads];
 		
 		Arrays.asList (this.senders)
@@ -51,18 +53,20 @@ public class MapClientsPool implements ClientsPool {
 					Thread.sleep (10);
 				} catch (InterruptedException ie) { return; }
 				
-				Iterator <Client> iterator = clients.values ().iterator ();
-				while (iterator.hasNext ()) {
-					Client client = iterator.next ();
-					while (client != null && client.hasInputData ()) {
-						String message = client.read ();
-						if (message != null) {
-							synchronized (messages) {
-								messages.add (new Pair <String, Integer> (message, client.getID ()));
-								messages.notify ();
+				synchronized (clients) /* block */ {
+					Iterator <Client> iterator = clients.values ().iterator ();
+					Iterable <Client> toStream = () -> iterator;
+					StreamSupport.stream (toStream.spliterator (), false).forEach (c -> {
+						if (c != null && c.hasInputData ()) {
+							String message = c.read ();
+							if (message != null) {
+								synchronized (messages) {
+									messages.add (new Pair <String, Integer> (message, c.getID ()));
+									messages.notify ();
+								}
 							}
 						}
-					}
+					});
 				}
 			}
 		}, "Ready scanner");
