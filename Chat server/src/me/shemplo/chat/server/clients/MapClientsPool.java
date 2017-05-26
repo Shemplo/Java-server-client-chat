@@ -3,43 +3,70 @@ package me.shemplo.chat.server.clients;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.Map;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
+import javafx.util.Pair;
 import me.shemplo.chat.server.exceptions.NoAvailableIDs;
 import me.shemplo.chat.server.ifs.Client;
 import me.shemplo.chat.server.ifs.ClientsPool;
 
 public class MapClientsPool implements ClientsPool {
 
+	private final ConcurrentLinkedQueue <Pair <String, Integer>> messages;
 	private final Map <Integer, Client> clients;
-	private final Thread [] threads;
+	private final Thread [] senders;
+	private final Thread scanner;
 	private final int POOL_SIZE;
 	
 	public MapClientsPool (int threads) {
 		POOL_SIZE = Integer.MAX_VALUE / 2;
 		clients = new HashMap <> ();
 		
-		this.threads = new Thread [threads];
-		Arrays.asList (this.threads)
+		this.messages = new ConcurrentLinkedQueue <> ();
+		this.senders = new Thread [threads];
+		
+		Arrays.asList (this.senders)
 				.stream ()
 				.map (t -> new Thread (() -> {
 					while (true) {
-						try {
-							Thread.sleep (10);
-						} catch (InterruptedException ie) { return; }
-						
-						Iterator <Client> iterator = clients.values ().iterator ();
-						while (iterator.hasNext ()) {
-							Client client = iterator.next ();
-							synchronized (client) {
-								while (client != null && client.hasInputData ()) {
-									String message = client.read ();
-									sendAll ("Recieved: " + message);
-								}
+						synchronized (messages) {
+							while (messages.isEmpty ()) {
+								try {
+									messages.wait ();
+								} catch (Exception e) { return; }
 							}
+							
+							Pair <String, Integer> message = messages.poll ();
+							sendAll (message.getKey ());
 						}
 					}
 				})).forEach (Thread::start);
+		
+		
+		this.scanner = new Thread (() -> {
+			while (true) {
+				try {
+					Thread.sleep (10);
+				} catch (InterruptedException ie) { return; }
+				
+				Iterator <Client> iterator = clients.values ().iterator ();
+				while (iterator.hasNext ()) {
+					Client client = iterator.next ();
+					while (client != null && client.hasInputData ()) {
+						String message = client.read ();
+						if (message != null) {
+							synchronized (messages) {
+								messages.add (new Pair <String, Integer> (message, client.getID ()));
+								messages.notify ();
+							}
+						}
+					}
+				}
+			}
+		}, "Ready scanner");
+		scanner.start ();
 	}
 	
 	public void add (Client client) {
@@ -93,7 +120,7 @@ public class MapClientsPool implements ClientsPool {
 		while (iterator.hasNext ()) {
 			Client client = iterator.next ();
 			synchronized (client) {
-				if (client != null) { client.send ("Recieved: " + message); }
+				if (client != null) { client.send ("Message: " + message); }
 			}
 		}
 	}
