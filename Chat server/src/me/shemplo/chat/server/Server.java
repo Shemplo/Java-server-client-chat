@@ -2,129 +2,89 @@ package me.shemplo.chat.server;
 
 import java.io.IOException;
 import java.net.ServerSocket;
-import java.net.Socket;
-import java.net.SocketTimeoutException;
 
-import me.shemplo.chat.server.clients.MapClientsPool;
-import me.shemplo.chat.server.clients.QueueClientsFactory;
-import me.shemplo.chat.server.ifs.ClientsFactory;
-import me.shemplo.chat.server.ifs.ClientsPool;
-import me.shemplo.chat.server.ifs.SocketAcceptor;
+import me.shemplo.chat.server.client.ClientProducer;
+import me.shemplo.chat.server.client.QueueClientProducer;
+import me.shemplo.chat.server.client.listener.ClientsListener;
+import me.shemplo.chat.server.client.listener.CycleClientsListener;
+import me.shemplo.chat.server.exceptions.ServerException;
 
 public class Server {
 	
-	private static final int DEFAULT_PORT = 0;
-	private static final int START_FAILED = 1;
+	public static final int DEFAULT_PORT = 0;
+	public static final int START_FAILED_CODE = 1;
+	public static final int STOP_FAILED_CODE = 2;
 	
 	/* ===| STATIC |=== */
 	
-	public static void main (String... args) {
-		int customPort = DEFAULT_PORT;
+	public static void main (String [] args) {
+		int runPort = DEFAULT_PORT;
+		runPort = 43;
 		
-		int argsIndex = 0;
-		while (argsIndex < args.length) {
-			String flag = args [argsIndex];
-			if (flag.indexOf ("-") == -1) {
-				System.err.println ("[ERROR] Flag `-[name]` expected but `" + flag + "` given");
-				System.exit (1);
-			}
-			
-			argsIndex ++;
-			switch (flag) {
-				case "-p":
-					if (argsIndex >= args.length) {
-						System.err.println ("[ERROR] Port number expected but arguments ended");
-						System.exit (START_FAILED);
-					}
-					
-					try {
-						customPort = Integer.parseInt (args [argsIndex ++]);
-						System.out.println ("[LOG] Default port changed on " + customPort);
-					} catch (NumberFormatException nfe) {
-						System.err.println ("[ERROR] Port number expected but `" 
-												+ args [argsIndex - 1] + "` given");
-						System.exit (START_FAILED);
-					}
-					
-					break;
-			}
+		int pointer = 0;
+		while (pointer < args.length) {
+			pointer ++;
 		}
 		
-		// Here must be check for updates
+		// Update checker must be here
 		
-		Server server = new Server ();
-		server.start (customPort);
+		try {
+			Server server = new Server ();
+			server.start (runPort, 1, 1);
+		} catch (ServerException e) {
+			System.err.println ("[ERROR] Failed to start server: " + e.getMessage ());
+			System.exit (START_FAILED_CODE);
+		}
 	}
 	
 	/* ===| CLASS |=== */
 	
-	private boolean isRunning;
-	private int PORT;
-	
 	private ServerSocket server;
-	private SocketAcceptor acceptor;
-	private ClientsFactory factory;
+	private boolean running = false;
 	
-	private Thread acceptorThread;
+	private ClientProducer producer;
+	private ClientsListener listener;
 	
-	public Server () {
+	public void start (int port, int prodThreads, int listenThreads) throws  ServerException {
+		if (server != null && running) { throw new ServerException ("Server is already started"); }
 		
-	}
-	
-	public void start (int port) {
 		try {
 			server = new ServerSocket (port);
+			server.setSoTimeout (1000);
 		} catch (IOException ioe) {
-			System.err.println ("[ERROR] Failed to start server: " + ioe.getMessage ());
-			System.exit (START_FAILED);
+			String message = ioe.getMessage () != null 
+								? ioe.getMessage () 
+								: "Unknown I/O reason";
+			throw new ServerException (message);
+		} catch (SecurityException se) {
+			String message = se.getMessage () != null 
+								? se.getMessage () 
+								: "Unknown security reason";
+			throw new ServerException (message);
 		} catch (IllegalArgumentException iae) {
-			System.err.println ("[ERROR] Port number must be between 0 and 65535");
-			System.exit (START_FAILED);
-		} catch (Exception e) {
-			System.err.println ("[ERROR] Message: " + e.getMessage ());
-			System.exit (START_FAILED);
+			String message = "Port value must be between 0 and 65535 (" + port + " given)";
+			throw new ServerException (message);
 		}
 		
-		this._init ();
-		
-		isRunning = true;
-		acceptorThread = new Thread (acceptor, "Client acceptor");
-		acceptorThread.start ();
-		
-		System.out.println ("[LOG] Server started on port " + PORT);
-	}
-	
-	private void _init () {
-		PORT = server.getLocalPort ();
-		acceptor = new ClientAcceptor ();
-		
-		ClientsPool pool = new MapClientsPool (this, 2);
-		factory = new QueueClientsFactory (pool, 1);
+		// TODO: wrap with try/catch when API will be finished
+		listener = new CycleClientsListener (this, listenThreads);
+		producer = new QueueClientProducer (server, listener, prodThreads);
+		System.out.println ("[LOG] Server started on port " + server.getLocalPort ());
 	}
 	
 	public void stop () {
-		System.out.println ("[LOG] Stopping server");
-	}
-	
-	/* ===| ACCEPTOR |=== */
-	
-	private class ClientAcceptor implements SocketAcceptor {
+		producer.stop ();
 		
-		public void run () {
-			while (isRunning) {
-				try {
-					Socket socket = server.accept ();
-					factory.register (socket);
-					// Any other actions with sc	
-				} catch (SocketTimeoutException ste) {
-					// Ignoring it
-				} catch (SecurityException | IOException e) {
-					System.err.println ("[ERROR] Fatal error: " + e.getMessage ());
-					stop ();
-				}
-			}
+		try {
+			server.close ();
+		} catch (IOException ioe) {
+			System.err.println ("[ERROR] Failed to stop server correctly: " + ioe.getMessage ());
+			
+			listener.stop ();
+			System.exit (STOP_FAILED_CODE);
 		}
 		
+		listener.stop ();
 	}
 	
 }
