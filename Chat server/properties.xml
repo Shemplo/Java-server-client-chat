@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE chat_properties>
+
+<server>
+	<port>0</port>
+	<threads>
+		<producers>2</producers>
+		<listeners>2</listeners>
+	</threads>
+	<limits>
+		<clients>100</clients>
+		<users>100</users>
+	</limits>
+	<updates>
+		<src>http://yandex.ru</src>
+		<check>false</check>
+	</updates>
+	<codes>
+		<startfailed>1</startfailed>
+		<stopfailed>2</stopfailed></codes></server>

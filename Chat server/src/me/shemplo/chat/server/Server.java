@@ -1,5 +1,8 @@
 package me.shemplo.chat.server;
 
+import static java.lang.Integer.*;
+import static java.lang.System.*;
+
 import java.io.IOException;
 import java.net.ServerSocket;
 
@@ -8,14 +11,32 @@ import me.shemplo.chat.server.client.QueueClientProducer;
 import me.shemplo.chat.server.client.listener.ClientsListener;
 import me.shemplo.chat.server.client.listener.CycleClientsListener;
 import me.shemplo.chat.server.exceptions.ServerException;
+import me.shemplo.chat.server.properties.PropertiesLoader;
 
 public class Server {
 	
-	public static final int DEFAULT_PORT = 0;
-	public static final int START_FAILED_CODE = 1;
-	public static final int STOP_FAILED_CODE = 2;
-	
 	/* ===| STATIC |=== */
+	
+	/*
+	 * server.port              = 0
+	 * server.threads.producers = 2
+	 * server.threads.listeners = 2
+	 * server.limits.clients    = 100
+	 * server.limits.users      = 100
+	 * server.updates.src       = http://yandex.ru
+	 * server.updates.check     = false
+	 * server.codes.startfailed = 1
+	 * server.codes.stopfailed  = 2
+	 * 
+	 */
+	
+	static {
+		PropertiesLoader.load ();
+	}
+	
+	public static final int DEFAULT_PORT = parseInt (getProperty ("server.port"));
+	public static final int START_FAILED_CODE = parseInt (getProperty ("server.codes.startfailed"));
+	public static final int STOP_FAILED_CODE = parseInt (getProperty ("server.codes.stopfailed"));
 	
 	public static void main (String [] args) {
 		int runPort = DEFAULT_PORT;
@@ -30,7 +51,10 @@ public class Server {
 		
 		try {
 			Server server = new Server ();
-			server.start (runPort, 1, 1);
+			
+			int producers = parseInt (getProperty ("server.threads.producers"));
+			int listeners = parseInt (getProperty ("server.threads.producers"));
+			server.start (runPort, producers, listeners);
 		} catch (ServerException e) {
 			System.err.println ("[ERROR] Failed to start server: " + e.getMessage ());
 			System.exit (START_FAILED_CODE);
