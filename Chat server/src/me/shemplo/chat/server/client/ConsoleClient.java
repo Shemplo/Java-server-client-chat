@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.Reader;
 import java.io.Writer;
+import java.net.Socket;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import me.shemplo.chat.server.client.user.User;
@@ -17,6 +18,7 @@ public class ConsoleClient implements Client {
 	
 	private BufferedReader br;
 	private PrintWriter pw;
+	private Socket socket;
 	private User user;
 	
 	private ConcurrentLinkedQueue <String> strings;
@@ -25,7 +27,7 @@ public class ConsoleClient implements Client {
 	
 	private boolean killed = false;
 	
-	public ConsoleClient (User user, Reader reader, Writer writer) {
+	public ConsoleClient (User user, Reader reader, Writer writer, Socket socket) {
 		if (reader != null) {
 			br = new BufferedReader (reader);
 		}
@@ -33,13 +35,14 @@ public class ConsoleClient implements Client {
 		if (writer != null) {
 			pw = new PrintWriter (writer);
 			
-			pw.println ("Hello");
+			pw.println ("--- Welcome to public chat room ---");
 			pw.flush ();
 		}
 		
 		this.strings = new ConcurrentLinkedQueue <> ();
 		this.builder = new StringBuilder ();
 		this.buffer = new char [1 << 10];
+		this.socket = socket;
 		this.user = user;
 	}
 	
@@ -88,7 +91,6 @@ public class ConsoleClient implements Client {
 		
 		String message = strings.poll ();
 		long timestamp = System.currentTimeMillis ();
-		System.out.println ("Message: " + message);
 		return makeMessage (message, timestamp, this);
 	}
 
@@ -103,7 +105,11 @@ public class ConsoleClient implements Client {
 		
 		if (message instanceof TextMessage) {
 			synchronized (pw) {
-				pw.println (message.getContent ());
+				String write = message.getTime () + " "
+								+ message.getClient ().getUser ().getLogin () + " "
+								+ message.getContent ().toString ();
+				
+				pw.println (write);
 				pw.flush ();
 			}
 		}
@@ -115,6 +121,8 @@ public class ConsoleClient implements Client {
 			this.killed = true;
 			if (br != null) { br.close (); }
 			if (pw != null) { pw.close (); }
+			
+			socket.close ();
 		} catch (IOException ioe) {
 			// Just handle exception
 		} finally {

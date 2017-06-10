@@ -96,8 +96,8 @@ public class QueueClientProducer implements ClientProducer {
 		InputStreamReader isr = new InputStreamReader (socket.getInputStream ());
 		OutputStreamWriter osr = new OutputStreamWriter (socket.getOutputStream ());
 		
-		User user = new DefaultUser (User.GUEST_ID, "pass");
-		return new ConsoleClient (user, isr, osr);
+		User user = new DefaultUser (); // Authorization on spot in future
+		return new ConsoleClient (user, isr, osr, socket);
 	}
 	
 }

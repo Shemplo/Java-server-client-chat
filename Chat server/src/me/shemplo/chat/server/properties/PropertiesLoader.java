@@ -72,9 +72,8 @@ public class PropertiesLoader {
 	}
 	
 	private static void _loadProperties (Node node, String prefix) {
-		String nodeName = node.getNodeName ();
-		
 		if (node.getNodeType () == 1 /* ELEMENT NODE */) {
+			String nodeName = node.getNodeName ();
 			prefix = prefix != null ? prefix : "";
 			prefix = prefix.length () > 0 
 						? prefix + "."

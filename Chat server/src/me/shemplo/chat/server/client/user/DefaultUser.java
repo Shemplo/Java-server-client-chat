@@ -1,5 +1,9 @@
 package me.shemplo.chat.server.client.user;
 
+import java.util.Map;
+
+import me.shemplo.chat.server.client.user.UsersManager.AccessFields;
+import me.shemplo.chat.server.client.user.UsersManager.AuthorizedUserFields;
 import me.shemplo.chat.server.exceptions.UserException;
 
 public class DefaultUser implements User {
@@ -9,9 +13,21 @@ public class DefaultUser implements User {
 					login, 
 					rights;
 	
-	public DefaultUser (String id, String password) {
-		this.id = _authorize (id, password);
+	public DefaultUser () {
+		this.id = User.GUEST_ID;
+		this.rights = "00000000";
+		this.login = "::guest::";
+		this.name = this.lastName = ":gst:";
+	}
+	
+	public DefaultUser (String id, String password) throws UserException {
+		Map <AuthorizedUserFields, String> user = UsersManager.authorize (id, password);
 		
+		this.id = user.get (AuthorizedUserFields.ID);
+		this.name = user.get (AuthorizedUserFields.NAME);
+		this.login = user.get (AuthorizedUserFields.LOGIN);
+		this.rights = user.get (AuthorizedUserFields.RIGHTS);
+		this.lastName = user.get (AuthorizedUserFields.LAST_NAME);
 	}
 	
 	@Override
@@ -31,7 +47,7 @@ public class DefaultUser implements User {
 	
 	@Override
 	public void changeLogin (String login, User user) throws UserException {
-		_checkRights (Fields.LOGIN, user);
+		_checkRights (AccessFields.LOGIN, user);
 	}
 	
 	@Override
@@ -45,20 +61,17 @@ public class DefaultUser implements User {
 	}
 
 	@Override
-	public String changeRights (Fields fields, char value, User user) {
-		return null;
-	}
-	
-	private String _authorize (String id, String password) {
-		name = lastName = ":gt:";
-		login = ":: guest ::";
-		rights = "l000";
+	public void changeRights (AccessFields fields, char value, User user) {
 		
-		return id;
 	}
 	
-	private boolean _checkRights (Fields filed, User user) throws UserException {
-		if (!checkRights (filed, user)) {
+	@Override
+	public void changeRights (String rights, User user) throws UserException {
+		
+	}
+	
+	private boolean _checkRights (AccessFields filed, User user) throws UserException {
+		if (!UsersManager.hasAccess (filed, user)) {
 			throw new UserException ("Not enough rights to change " 
 										+ filed.filed () + " for user " 
 										+ user.getID ());

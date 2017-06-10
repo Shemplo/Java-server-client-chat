@@ -17,4 +17,6 @@
 	</updates>
 	<codes>
 		<startfailed>1</startfailed>
-		<stopfailed>2</stopfailed></codes></server>
+		<stopfailed>2</stopfailed>
+	</codes>
+</server>

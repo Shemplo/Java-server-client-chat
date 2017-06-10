@@ -1,5 +1,8 @@
 package me.shemplo.chat.server.client.listener;
 
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.StringTokenizer;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
@@ -9,8 +12,12 @@ import java.util.concurrent.atomic.AtomicLong;
 import me.shemplo.chat.server.Server;
 import me.shemplo.chat.server.channel.ChatChannel;
 import me.shemplo.chat.server.client.Client;
+import me.shemplo.chat.server.client.user.RootUser;
 import me.shemplo.chat.server.client.user.User;
+import me.shemplo.chat.server.client.user.UsersManager;
+import me.shemplo.chat.server.client.user.UsersManager.AuthorizedUserFields;
 import me.shemplo.chat.server.exceptions.ChannelException;
+import me.shemplo.chat.server.exceptions.UserException;
 import me.shemplo.chat.server.parcel.Message;
 import me.shemplo.chat.server.parcel.TextMessage;
 
@@ -25,6 +32,7 @@ public class CycleClientsListener implements ClientsListener {
 	private ConcurrentMap <User, Client> clients;
 	
 	private Server server;
+	private User root;
 	
 	private AtomicLong sleep; // Time to sleep for threads
 	private boolean running = false;
@@ -35,6 +43,14 @@ public class CycleClientsListener implements ClientsListener {
 		if (server == null) { throw new NullPointerException ("Null given as ServerSocket argument"); }
 		this.server = server;
 		this._init ();
+		
+		try {
+			this.root = RootUser.getInstance ();
+		} catch (UserException ue) {
+			System.err.println ("[ERROR] Failed to create root user: " + ue.getMessage ());
+			System.out.println ("[WARNING] Root operations with server disabled"
+									+ " (to fix this try to restart server)");
+		}
 		
 		if (threads <= 0) { throw new IllegalArgumentException ("The number of threads must be positive"); }
 		this.pool = new Thread [threads];
@@ -47,7 +63,7 @@ public class CycleClientsListener implements ClientsListener {
 							long tasks = delay * readQueue.size () + delay * writeQueue.size ();
 							if (tasks >= 200) { sleep.updateAndGet (v -> Math.max (0, v - 1)); } 
 							else if (tasks <= 10) { sleep.updateAndGet (v -> Math.min (500, v + 1)); }
-							System.out.println ("[LOG] Current delay: " + sleep.get ());
+							// DEBUG: System.out.println ("[LOG] Current delay: " + sleep.get ());
 							
 							try {
 								Thread.sleep (sleep.get ());
@@ -56,13 +72,10 @@ public class CycleClientsListener implements ClientsListener {
 							}
 							
 							Client client = readQueue.poll ();
-							System.out.println ("[LOG] Queue size: " + readQueue.size ());
 							
 							if (client != null) {
-								System.out.println ("[LOG] Check if client has data");
 								while (client.hasInputData ()) {
 									Message message = client.read ();
-									System.out.println ("[LOG] Message got");
 									if (message != null && !_executeCommand (message)) {
 										writeQueue.add (message);
 									}
@@ -91,7 +104,7 @@ public class CycleClientsListener implements ClientsListener {
 				try {
 					Thread.sleep (10);
 				} catch (InterruptedException ie) {
-					// Just handle exception
+					continue; // Just handle exception
 				}
 				
 				for (Client client : clients.values ()) {
@@ -121,14 +134,52 @@ public class CycleClientsListener implements ClientsListener {
 	
 	private boolean _executeCommand (Message message) {
 		if (message instanceof TextMessage) {
-			switch ((String) message.getContent ()) {
-				case "/stop":
-					server.stop ();
+			String content = (String) message.getContent ();
+			if (content.indexOf ("/auth") == 0) {
+				StringTokenizer st = new StringTokenizer (content);
+				st.nextToken (); // This is "/auth" string
+				String login = "", password = "";
+				
+				try {
+					login = st.nextToken ();
+					password = st.nextToken ();
+				} catch (NoSuchElementException nsee) {
+					// TODO: Write to client that not enough arguments
 					return true;
-					
-				case "/exit":
-					unbind (message.getClient ());
+				}
+				
+				User real = message.getClient ().getUser ();
+				Map <AuthorizedUserFields, String> user;
+				
+				try {
+					user = UsersManager.authorize (login, password);
+				} catch (UserException ue) {
+					// TODO: Write to client that authorization failed
 					return true;
+				}
+				
+				try {
+					real.changeName (user.get (AuthorizedUserFields.NAME), root);
+					real.changeLogin (user.get (AuthorizedUserFields.LOGIN), root);
+					real.changeRights (user.get (AuthorizedUserFields.RIGHTS), root);
+					real.changeLastName (user.get (AuthorizedUserFields.LAST_NAME), root);
+				} catch (UserException ue) {
+					// Just handle exception
+					// This issue is impossible due to root access
+				}
+				
+				return true;
+			}
+			
+			if (content.equals ("/exit")) {
+				unbind (message.getClient ());
+				return true;
+			}
+			
+			if (content.equals ("/stop")) {
+				System.out.println ("[LOG] Stopping server...");
+				server.stop ();
+				return true;
 			}
 		}
 		
@@ -167,18 +218,30 @@ public class CycleClientsListener implements ClientsListener {
 		users.get (client.getUser ().getID ()).remove (client);
 		clients.remove (client.getUser ());
 	}
+	
+	@Override
+	public void unbind (String id) {
+		
+	}
 
 	@Override
 	public void stop () {
 		this.running = false;
 		scanner.interrupt ();
 		
-		for (Thread thread : pool) {
+		/*for (Thread thread : pool) {
 			thread.interrupt ();
-		}
+		}*/
 		
 		for (int i = 0; i < pool.length; i ++) {
-			pool [i] = null;
+			try {
+				pool [i].interrupt ();
+				pool [i].join ();
+			} catch (InterruptedException ie) {
+				// Just handle exception
+			} finally {
+				pool [i] = null;
+			}
 		}
 		
 		for (Client client : clients.values ()) { unbind (client); }

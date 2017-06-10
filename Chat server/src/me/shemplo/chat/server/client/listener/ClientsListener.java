@@ -11,6 +11,8 @@ public interface ClientsListener {
 	
 	public void unbind (Client client);
 	
+	public void unbind (String id);
+	
 	public void stop ();
 	
 }
