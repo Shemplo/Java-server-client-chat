@@ -18,6 +18,7 @@ public class CycleClientsListener implements ClientsListener {
 	
 	private ConcurrentLinkedQueue <Message> writeQueue;
 	private ConcurrentLinkedQueue <Client> readQueue;
+	private ConcurrentSkipListSet <Client> inQueue;
 	
 	private ConcurrentMap <String, ConcurrentSkipListSet <Client>> users;
 	private ConcurrentMap <String, ChatChannel> channels;
@@ -45,8 +46,8 @@ public class CycleClientsListener implements ClientsListener {
 							long delay = sleep.get ();
 							long tasks = delay * readQueue.size () + delay * writeQueue.size ();
 							if (tasks >= 200) { sleep.updateAndGet (v -> Math.max (0, v - 1)); } 
-							else if (tasks <= 10) { sleep.updateAndGet (v -> Math.min (1000, v + 1)); }
-							// DEBUG: System.out.println ("[LOG] Current delay: " + sleep.get ());
+							else if (tasks <= 10) { sleep.updateAndGet (v -> Math.min (500, v + 1)); }
+							System.out.println ("[LOG] Current delay: " + sleep.get ());
 							
 							try {
 								Thread.sleep (sleep.get ());
@@ -55,13 +56,19 @@ public class CycleClientsListener implements ClientsListener {
 							}
 							
 							Client client = readQueue.poll ();
+							System.out.println ("[LOG] Queue size: " + readQueue.size ());
+							
 							if (client != null) {
+								System.out.println ("[LOG] Check if client has data");
 								while (client.hasInputData ()) {
 									Message message = client.read ();
+									System.out.println ("[LOG] Message got");
 									if (message != null && !_executeCommand (message)) {
 										writeQueue.add (message);
 									}
 								}
+								
+								inQueue.remove (client);
 							}
 							
 							Message message = writeQueue.poll ();
@@ -88,7 +95,12 @@ public class CycleClientsListener implements ClientsListener {
 				}
 				
 				for (Client client : clients.values ()) {
-					if (client != null && client.hasInputData ()) { readQueue.add (client); }
+					if (client != null 
+							&& client.hasInputData () 
+							&& !inQueue.contains (client)) {
+						readQueue.add (client);
+						inQueue.add (client);
+					}
 				}
 			}
 		}, "Listener thread");
@@ -98,6 +110,7 @@ public class CycleClientsListener implements ClientsListener {
 	private void _init () {
 		writeQueue = new ConcurrentLinkedQueue <> ();
 		readQueue = new ConcurrentLinkedQueue <> ();
+		inQueue = new ConcurrentSkipListSet <> ();
 		channels = new ConcurrentHashMap <> ();
 		clients = new ConcurrentHashMap <> ();
 		users = new ConcurrentHashMap <> ();

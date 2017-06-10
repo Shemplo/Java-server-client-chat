@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.Reader;
 import java.io.Writer;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 import me.shemplo.chat.server.client.user.User;
 import me.shemplo.chat.server.parcel.Message;
@@ -17,6 +18,10 @@ public class ConsoleClient implements Client {
 	private BufferedReader br;
 	private PrintWriter pw;
 	private User user;
+	
+	private ConcurrentLinkedQueue <String> strings;
+	private StringBuilder builder;
+	private char [] buffer;
 	
 	private boolean killed = false;
 	
@@ -32,6 +37,9 @@ public class ConsoleClient implements Client {
 			pw.flush ();
 		}
 		
+		this.strings = new ConcurrentLinkedQueue <> ();
+		this.builder = new StringBuilder ();
+		this.buffer = new char [1 << 10];
 		this.user = user;
 	}
 	
@@ -41,9 +49,34 @@ public class ConsoleClient implements Client {
 	@Override
 	public boolean hasInputData () {
 		if (br == null || killed) { return false; }
+		if (!strings.isEmpty ()) { return true; }
 		
 		try {
-			synchronized (br) { return br.ready (); }
+			synchronized (br) {
+				synchronized (builder) {
+					if (!br.ready ()) { return !strings.isEmpty (); }
+					
+					int read = br.read (buffer);
+					
+					boolean wasSeparator = false;
+					for (int i = 0; i < read; i ++) {
+						char c = buffer [i];
+						
+						boolean isSeparator = c == '\n' || c == '\r';
+						if (isSeparator && !wasSeparator) {
+							strings.add (builder.toString ());
+							builder = new StringBuilder ();
+							wasSeparator = true;
+							continue;
+						} else if (isSeparator) {
+							continue;
+						}
+						
+						builder.append (c);
+						wasSeparator = false;
+					}
+				}
+			}
 		} catch (IOException ioe) { ioe.printStackTrace (); }
 		
 		return false;
@@ -53,14 +86,10 @@ public class ConsoleClient implements Client {
 	public Message read () {
 		if (!hasInputData ()) { return null; }
 		
-		try {
-			String message;
-			synchronized (br) { message = br.readLine (); }
-			long timestamp = System.currentTimeMillis ();
-			return makeMessage (message, timestamp, this);
-		} catch (IOException ioe) {}
-		
-		return null;
+		String message = strings.poll ();
+		long timestamp = System.currentTimeMillis ();
+		System.out.println ("Message: " + message);
+		return makeMessage (message, timestamp, this);
 	}
 
 	@Override
